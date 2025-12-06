@@ -19,10 +19,10 @@ function main() {
 
   if (runPartArg == "1") {
     console.log("starting part 1");
-    console.log(doTimed(() => solve1(parsedInput)));
+    doTimed(() => solve1(parsedInput));
   } else {
     console.log("starting part 2");
-    console.log(doTimed(() => solve2(parsedInput)));
+    doTimed(() => solve2(parsedInput));
   }
 }
 
