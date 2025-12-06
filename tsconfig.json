@@ -18,7 +18,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false, // we work single-shot with well-defined inputs for AOC - not worth the extra coding time. - J
+    "noUncheckedIndexedAccess": false, // we work single-shot with well-defined inputs for AOC - not worth the extra coding time. - James
     "noImplicitOverride": true,
 
     // Some stricter flags (disabled by default)
