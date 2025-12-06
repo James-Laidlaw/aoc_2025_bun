@@ -1,0 +1,20 @@
+{
+  "name": "aoc-2025",
+  "type": "module",
+  "scripts": {
+    "day": "bun run",
+    "new": "bun run scripts/newDay.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest"
+  },
+  "dependencies": {
+    "fs": "^0.0.1-security"
+  },
+  "module": "index.ts",
+  "private": true,
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
