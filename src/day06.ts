@@ -22,10 +22,10 @@ function main() {
 
   if (runPartArg == "1") {
     console.log("starting part 1");
-    console.log(doTimed(() => solve1(parsedInput)));
+    doTimed(() => solve1(parsedInput));
   } else {
     console.log("starting part 2");
-    console.log(doTimed(() => solve2(parsedInput)));
+    doTimed(() => solve2(parsedInput));
   }
 }
 
@@ -77,7 +77,6 @@ function parseInput(inputString: string): ParsedInput {
 
 function solve1(input: ParsedInput): void {
   let sum = 0;
-  const test = "he ";
   input.forEach((problem) => {
     const operation =
       problem.operation === "*"
@@ -91,36 +90,29 @@ function solve1(input: ParsedInput): void {
 
 function cepalaphizeInput(unCepalaphizedIn: ParsedInput): void {
   unCepalaphizedIn.forEach((problem) => {
-    // console.log("working on problem: ", problem);
     const trueNumbers: string[] = [];
 
     const elementStrings = problem.elements.map((element) =>
       element.toString()
     );
-    // console.log("strings:", elementStrings);
 
     const maxLength = elementStrings.reduce(
       (prev, current) => Math.max(prev, current.length),
       elementStrings[0].length
     );
 
-    // console.log("cepelaphized element count: ", maxLength);
-
     for (let i = maxLength - 1; i >= 0; i--) {
       const digitChars = elementStrings.map((elementString) =>
         elementString.charAt(i)
       );
-      // console.log("digit chars");
 
       const trueNumber = digitChars
         .filter((char) => char !== undefined && char !== "" && char !== " ")
         .join("");
-      // console.log("number made: ", trueNumber);
       trueNumbers.push(trueNumber);
     }
 
     problem.elements = trueNumbers;
-    // console.log("done with problem:", problem);
   });
 }
 
