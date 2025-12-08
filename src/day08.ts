@@ -139,7 +139,7 @@ function solve2(input: ParsedInput): void {
     point1: number;
     point2: number;
     distance: number;
-  }[] = []; //pair of indexes into input list
+  }[] = [];
 
   for (let p1Idx = 0; p1Idx < input.length; p1Idx++) {
     for (let p2Idx = p1Idx + 1; p2Idx < input.length; p2Idx++) {
