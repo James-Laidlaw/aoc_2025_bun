@@ -1,4 +1,5 @@
 import { readInput } from "../src/utils/readInput";
+import { init, type Arith, type IntNum } from "z3-solver";
 
 function main() {
   const runPartArg = process.argv[2];
@@ -363,160 +364,46 @@ type state = {
   distance: number;
   bannedButtons?: number[];
 };
-function solve2(input: ParsedInput): void {
+async function solve2(input: ParsedInput): Promise<void> {
+  console.log("BUN DOESN'T WORK WITH Z3 THIS WILL CRASH IF YOU ARE USING BUN USE NPX TSX ... INSTEAD");
   let sum = 0;
-  let machineCount = 0;
-  for (const machineConfig of input) {
-    console.log("starting machine: ", machineCount++);
-    const buttonInfoMap = machineConfig.buttonSpecs.toSorted(
-      (a, b) => b.length - a.length
-    );
-    const initialJoltageState = machineConfig.joltageReqs.map(() => 0);
-    const queuedOrVisitedJoltageStates = new ArrayHashmap(
-      machineConfig.joltageReqs.length
-    );
+  const z3Init = await init();
+  for (const machine of input) {
+    const buttons = machine.buttonSpecs;
+    const joltages = machine.joltageReqs;
 
-    const dualPhaseQueue: [state[], state[]] = [
-      [
-        {
-          joltageState: initialJoltageState,
-          distance: 0,
-        },
-      ],
-      [],
-    ];
-    let readPhase = 0;
-    let writePhase = 1;
+    const { Int, Optimize } = z3Init.Context("main");
+    const optimizer = new Optimize();
 
-    // queuedOrVisitedStates[initialState] = true;
-    const requiredJoltage = machineConfig.joltageReqs;
-    let currentDepthLogging = 0;
-    while (true) {
-      // console.log("open options: ", openStatesQueue.length);
-
-      if (dualPhaseQueue[readPhase].length == 0) {
-        const temp = readPhase;
-        readPhase = writePhase;
-        writePhase = temp;
-        if (dualPhaseQueue[readPhase].length == 0) {
-          throw new Error("explored all states without finding an answer");
-        }
-      }
-      const stateToExplore = dualPhaseQueue[readPhase].pop();
-      if (stateToExplore == undefined) throw new Error("shouldn't happen");
-      if (areArraysEqual(stateToExplore.joltageState, requiredJoltage)) {
-        sum += stateToExplore.distance;
-        break;
-      }
-      // console.log("exploring: ", stateToExplore.state);
-      if (stateToExplore.distance > currentDepthLogging) {
-        currentDepthLogging = stateToExplore.distance;
-        console.log("reached depth: ", stateToExplore.distance);
-      }
-
-      if (stateToExplore.distance < currentDepthLogging) {
-        console.log("breadth-first rule broken");
-      }
-
-      const stateToExploreNumeric = stateToExplore.joltageState;
-
-      const indexesOfJoltsThatNeedToIncrease =
-        getIndexesOFJoltsThatNeedToIncrease(
-          stateToExploreNumeric,
-          machineConfig.joltageReqs
-        );
-      let buttonsToUse = getNonHarmfulButtonIdxs(
-        indexesOfJoltsThatNeedToIncrease,
-        buttonInfoMap
-      );
-
-      //remove any banned buttons
-      if (
-        stateToExplore.bannedButtons != undefined &&
-        stateToExplore.bannedButtons.length > 0
-      ) {
-        buttonsToUse = filterBannedButtons(
-          buttonsToUse,
-          stateToExplore.bannedButtons
-        );
-      }
-
-      //if in impossible state, give up on branch
-      const impossible = isStateImpossible(
-        indexesOfJoltsThatNeedToIncrease,
-        buttonsToUse,
-        buttonInfoMap
-      );
-
-      if (impossible) {
-        // console.log("pruned impossible option!");
-        continue;
-      }
-
-      buttonsToUse = selectMostUsefulOptions(
-        indexesOfJoltsThatNeedToIncrease,
-        buttonsToUse,
-        buttonInfoMap
-      );
-
-      const reachableStatesNumeric = buttonsToUse.map(
-        (
-          buttonIdx,
-          buttonIdxIdx //yes i know buttonidxidx is confusing
-        ) => {
-          let idxFirstSameSizeButton = buttonIdxIdx;
-          while (
-            idxFirstSameSizeButton > 0 &&
-            buttonInfoMap[buttonsToUse[idxFirstSameSizeButton - 1]].length ==
-              buttonInfoMap[buttonsToUse[idxFirstSameSizeButton]].length
-          ) {
-            idxFirstSameSizeButton--;
-          }
-
-          let bannedButtons: undefined | number[];
-          const prevBannedButtons = stateToExplore.bannedButtons;
-          const biggerButtonsNotChosen = buttonsToUse.slice(
-            0,
-            idxFirstSameSizeButton
-          );
-
-          // if stateToExplore had banned buttons (and they weren't an empty list)
-          if (prevBannedButtons != undefined && prevBannedButtons.length > 0) {
-            if (biggerButtonsNotChosen.length > 0) {
-              bannedButtons = mergeSorted(
-                prevBannedButtons,
-                biggerButtonsNotChosen
-              );
-            } else {
-              bannedButtons = prevBannedButtons;
-            }
-          } else if (biggerButtonsNotChosen.length > 0) {
-            bannedButtons = biggerButtonsNotChosen;
-          }
-
-          return {
-            joltageState: stateToExploreNumeric.map((number, index) =>
-              buttonInfoMap[buttonIdx].includes(index) ? number + 1 : number
-            ),
-            distance: stateToExplore.distance + 1,
-            bannedButtons: bannedButtons,
-          };
-        }
-      );
-
-      const statesToQueue = reachableStatesNumeric.filter((state) => {
-        return (
-          !queuedOrVisitedJoltageStates.exists(state.joltageState)
-        );
-      });
-
-      statesToQueue.forEach((state) => {
-        dualPhaseQueue[writePhase].push(state);
-        queuedOrVisitedJoltageStates.add(state.joltageState);
-      });
+    // for each button, create a variable that represents the amount of times that button's been pushed
+    // also create a sum variable that tracks how many times all the buttons have been pushed
+    let buttonPressSum: IntNum | Arith = Int.val(0);
+    const buttonVariables: Arith[] = [];
+    for (let buttonIdx = 0; buttonIdx < buttons.length; buttonIdx++) {
+      const value = Int.const(buttonIdx.toString());
+      optimizer.add(value.ge(0)); // no negative button presses
+      buttonPressSum = buttonPressSum.add(value);
+      buttonVariables.push(value);
     }
-  }
 
+    // for each joltage, create a formula that requires the sum of the times each associated button is pressed to equal the required joltage, add this to the optimizer
+    joltages.forEach((joltageReq, joltageIDx) => {
+
+      let joltageSum: IntNum | Arith = Int.val(0);
+      for (let buttonIdx = 0; buttonIdx < buttons.length; buttonIdx++) {
+        if (buttons[buttonIdx].includes(joltageIDx))
+          joltageSum = joltageSum.add(buttonVariables[buttonIdx]);
+      }
+      const equalCondition = joltageSum.eq(Int.val(joltageReq));
+      optimizer.add(equalCondition);
+    });
+
+    // magic box
+    optimizer.minimize(buttonPressSum);
+    await optimizer.check();
+
+    sum += parseInt(optimizer.model().eval(buttonPressSum).toString());
+  }
   console.log(sum);
 }
 

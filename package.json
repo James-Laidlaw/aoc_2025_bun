@@ -10,7 +10,9 @@
     "@types/node": "latest"
   },
   "dependencies": {
-    "fs": "^0.0.1-security"
+    "fs": "^0.0.1-security",
+    "tsx": "^4.21.0",
+    "z3-solver": "^4.15.4"
   },
   "module": "index.ts",
   "private": true,
