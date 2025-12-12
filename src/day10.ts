@@ -45,7 +45,6 @@ type machineSpecs = {
 
 type ParsedInput = machineSpecs[];
 
-//TODO this is populated with a demo from day 5
 function parseInput(inputString: string): ParsedInput {
   const machineStrings = inputString.split("\n");
   const result: ParsedInput = [];
@@ -157,63 +156,63 @@ function stateIsBeyondSpecs(state: number[], desiredState: number[]): boolean {
   return state.some((joltage, idx) => joltage > desiredState[idx]);
 }
 
-function pruneUselessHarmfulOptions(
+function getIndexesOFJoltsThatNeedToIncrease(
   state: number[],
-  desiredState: number[],
-  options: number[][]
-): number[][] {
-  const joltsThatNeedToIncrease: { [joltIdx: number]: boolean } = {};
+  desiredState: number[]
+) {
+  const IndexesOFJoltsThatNeedToIncrease: number[] = [];
   state.forEach((currentJolt, idx) => {
     if (desiredState[idx] > currentJolt) {
-      joltsThatNeedToIncrease[idx] = true;
+      IndexesOFJoltsThatNeedToIncrease.push(idx);
     }
   });
+  return IndexesOFJoltsThatNeedToIncrease;
+}
 
-  const viableButtonsToPush = options.filter((buttonAffectedJolts) =>
-    buttonAffectedJolts.every((joltIdx) => joltsThatNeedToIncrease[joltIdx])
-  );
+// prune options that we literally can't use or we will overshoot
+function getNonHarmfulButtonIdxs(
+  IndexesOfJoltsThatNeedToIncrease: number[], // must be sorted
+  buttonsInfo: number[][] // each button must be sorted
+): number[] {
+  const harmlessButtonIdxs = [] as number[];
+  buttonsInfo.forEach((buttonInfo, idx) => {
+    if (isArraySuperset(buttonInfo, IndexesOfJoltsThatNeedToIncrease)) {
+      harmlessButtonIdxs.push(idx);
+    }
+  });
+  return harmlessButtonIdxs;
+}
 
-  // if there are some buttons that are the sole way to increase joltage for that element, prioritize pressing those first (internally prioritize early joltage over late joltage to reduce branching)
-  const optionsToIncreaseEachJoltage: number[][][] = []; //0 contains all options that (in part) increase joltage 0, 1 does the same for 1, etc
-  for (let joltIdx = 0; joltIdx < state.length; joltIdx++) {
-    if (!joltsThatNeedToIncrease[joltIdx]) continue;
+function isStateImpossible(
+  IndexesOfJoltsThatNeedToIncrease: number[],
+  usableButtonIdxs: number[],
+  buttonInfoMap: number[][]
+): boolean {
+  let remainingJolts = IndexesOfJoltsThatNeedToIncrease;
 
-    const allOptionsThatCanIncreaseJoltIdx = viableButtonsToPush.filter(
-      (buttonAffectedJolts) => buttonAffectedJolts.includes(joltIdx)
+  for (const usableButtonIdx of usableButtonIdxs) {
+    remainingJolts = remainingJolts.filter(
+      (joltIdx) => !buttonInfoMap[usableButtonIdx].includes(joltIdx)
     );
-    if (allOptionsThatCanIncreaseJoltIdx.length == 1) {
-      return allOptionsThatCanIncreaseJoltIdx;
+
+    if (remainingJolts.length == 0) {
+      return false;
     }
   }
 
-  return viableButtonsToPush;
+  return remainingJolts.length > 0;
 }
 
-function pruneUselessHarmfulOptionsExperimental(
-  state: number[],
-  desiredState: number[],
-  options: number[][]
-): number[][] {
-  const joltsThatNeedToIncrease: { [joltIdx: number]: boolean } = {};
-  state.forEach((currentJolt, idx) => {
-    if (desiredState[idx] > currentJolt) {
-      joltsThatNeedToIncrease[idx] = true;
-    }
-  });
-
-  const viableButtonsToPush = options.filter((buttonAffectedJolts) =>
-    buttonAffectedJolts.every((joltIdx) => joltsThatNeedToIncrease[joltIdx])
-  );
-
-  // if you need to increase 1, 2, 3 and 4 and you have the options (1, 2, 3, 4) and (1, 2, 3) and (4) and there are no other options that influence 1, 2, 3, or 4 then you shold use 1, 2, 3, 4
-
+function selectMostUsefulOptions(
+  indexesOfJoltsThatNeedToIncrease: number[],
+  availableButtonIdxs: number[],
+  buttonValueMap: number[][]
+): number[] {
   //pick joltage with least options to increase it, only allow options from that joltage first
-  let bestOptions: number[][] | undefined;
-  for (let joltIdx = 0; joltIdx < state.length; joltIdx++) {
-    if (!joltsThatNeedToIncrease[joltIdx]) continue;
-
-    const optionsForJoltage = viableButtonsToPush.filter(
-      (buttonAffectedJolts) => buttonAffectedJolts.includes(joltIdx)
+  let bestOptions: number[] | undefined;
+  for (const joltIndex of indexesOfJoltsThatNeedToIncrease) {
+    const optionsForJoltage = availableButtonIdxs.filter((buttonIdx) =>
+      buttonValueMap[buttonIdx].includes(joltIndex)
     );
 
     if (
@@ -228,7 +227,7 @@ function pruneUselessHarmfulOptionsExperimental(
     }
   }
 
-  return viableButtonsToPush;
+  return bestOptions ?? availableButtonIdxs;
 }
 
 function areArraysEqual(arr1: any[], arr2: any[]): boolean {
@@ -236,71 +235,284 @@ function areArraysEqual(arr1: any[], arr2: any[]): boolean {
   return arr1.every((entry, idx) => entry === arr2[idx]);
 }
 
-type state = { state: string; distance: number; bannedButtons?: number[][] };
+function isButtonInButtonArray<T extends any>(
+  button: T[],
+  arrayToCheck: T[][]
+): boolean {
+  return arrayToCheck.some((arrayToCheckElement) =>
+    areArraysEqual(arrayToCheckElement, button)
+  );
+}
+
+function filterBannedButtons(
+  buttonindexes: number[],
+  bannedButtonIndexes: number[]
+): number[] {
+  const unbannedButtons: number[] = [];
+  let buttonIdx = 0;
+  let banIdx = 0;
+
+  while (
+    buttonIdx < buttonindexes.length &&
+    banIdx < bannedButtonIndexes.length
+  ) {
+    const button = buttonindexes[buttonIdx];
+    const banEntry = bannedButtonIndexes[banIdx];
+
+    if (button === banEntry) {
+      buttonIdx++;
+      banIdx++;
+    } else if (button < banEntry) {
+      unbannedButtons.push(button);
+      buttonIdx++;
+    } else {
+      banIdx++;
+    }
+  }
+
+  while (buttonIdx < buttonindexes.length) {
+    unbannedButtons.push(buttonindexes[buttonIdx++]);
+  }
+
+  return unbannedButtons;
+}
+
+function mergeSorted(list1: number[], list2: number[]): number[] {
+  let idx1 = 0;
+  let idx2 = 0;
+  const res = [];
+  while (idx1 < list1.length && idx2 < list2.length) {
+    if (list1[idx1] < list2[idx2]) {
+      res.push(list1[idx1]);
+      idx1++;
+    } else if (list1[idx1] == list2[idx2]) {
+      //avoid duplicates by only adding the iteration from 1
+      res.push(list1[idx1]);
+      idx1++;
+      idx2++;
+    } else {
+      res.push(list2[idx2]);
+      idx2++;
+    }
+  }
+
+  while (idx1 < list1.length) {
+    res.push(list1[idx1++]);
+  }
+
+  while (idx2 < list2.length) {
+    res.push(list2[idx2++]);
+  }
+  return res;
+}
+
+function isArraySuperset(
+  subsetArray: number[],
+  supersetArray: number[]
+): boolean {
+  if (supersetArray.length < subsetArray.length) return false;
+  let subIdx = 0;
+  let superIdx = 0;
+
+  while (subIdx < subsetArray.length && superIdx < supersetArray.length) {
+    if (subsetArray[subIdx] == supersetArray[superIdx]) {
+      subIdx++;
+    }
+    superIdx++;
+  }
+
+  return superIdx != supersetArray.length || subIdx == subsetArray.length;
+}
+
+type trieNode = {
+  children: (trieNode | undefined)[];
+};
+class ArrayHashmap {
+  private internalTrie: trieNode;
+
+  constructor(arrayLength: number) {
+    this.internalTrie = { children: [] };
+  }
+
+  public add(array: number[]) {
+    let currentNode = this.internalTrie;
+
+    for (const item of array) {
+      if (currentNode.children[item] == undefined) {
+        currentNode.children[item] = { children: [] };
+      }
+      currentNode = currentNode.children[item];
+    }
+  }
+
+  public exists(array: number[]) {
+    let currentNode = this.internalTrie;
+
+    for (const item of array) {
+      if (currentNode.children[item] == undefined) {
+        return false;
+      }
+      currentNode = currentNode.children[item];
+    }
+    return true;
+  }
+}
+
+type state = {
+  joltageState: number[];
+  distance: number;
+  bannedButtons?: number[];
+};
 function solve2(input: ParsedInput): void {
   let sum = 0;
   let machineCount = 0;
   for (const machineConfig of input) {
     console.log("starting machine: ", machineCount++);
-    const initialState = numArrayToString(
-      machineConfig.joltageReqs.map(() => 0)
+    const buttonInfoMap = machineConfig.buttonSpecs.toSorted(
+      (a, b) => b.length - a.length
     );
-    const queuedOrVisitedStates: { [state: string]: Boolean } = {};
+    const initialJoltageState = machineConfig.joltageReqs.map(() => 0);
+    const queuedOrVisitedJoltageStates = new ArrayHashmap(
+      machineConfig.joltageReqs.length
+    );
 
-    const openStatesQueue: state[] = [
-      {
-        state: initialState,
-        distance: 0,
-      },
+    const dualPhaseQueue: [state[], state[]] = [
+      [
+        {
+          joltageState: initialJoltageState,
+          distance: 0,
+        },
+      ],
+      [],
     ];
-    queuedOrVisitedStates[initialState] = true;
-    const requiredJoltageString = numArrayToString(machineConfig.joltageReqs);
-    while (openStatesQueue.length > 0) {
+    let readPhase = 0;
+    let writePhase = 1;
+
+    // queuedOrVisitedStates[initialState] = true;
+    const requiredJoltage = machineConfig.joltageReqs;
+    let currentDepthLogging = 0;
+    while (true) {
       // console.log("open options: ", openStatesQueue.length);
-      const stateToExplore = openStatesQueue.shift();
-      if (stateToExplore == undefined) throw new Error("bad");
-      if (stateToExplore.state === requiredJoltageString) {
+
+      if (dualPhaseQueue[readPhase].length == 0) {
+        const temp = readPhase;
+        readPhase = writePhase;
+        writePhase = temp;
+        if (dualPhaseQueue[readPhase].length == 0) {
+          throw new Error("explored all states without finding an answer");
+        }
+      }
+      const stateToExplore = dualPhaseQueue[readPhase].pop();
+      if (stateToExplore == undefined) throw new Error("shouldn't happen");
+      if (areArraysEqual(stateToExplore.joltageState, requiredJoltage)) {
         sum += stateToExplore.distance;
         break;
       }
       // console.log("exploring: ", stateToExplore.state);
+      if (stateToExplore.distance > currentDepthLogging) {
+        currentDepthLogging = stateToExplore.distance;
+        console.log("reached depth: ", stateToExplore.distance);
+      }
 
-      const stateToExploreNumeric = stringToNumArray(stateToExplore.state);
+      if (stateToExplore.distance < currentDepthLogging) {
+        console.log("breadth-first rule broken");
+      }
 
-      const optionsAfterRemovingBanned = machineConfig.buttonSpecs.filter(
-        (button) =>
-          !(stateToExplore.bannedButtons ?? []).every(
-            (bannedButton) => !areArraysEqual(button, bannedButton)
-          )
+      const stateToExploreNumeric = stateToExplore.joltageState;
+
+      const indexesOfJoltsThatNeedToIncrease =
+        getIndexesOFJoltsThatNeedToIncrease(
+          stateToExploreNumeric,
+          machineConfig.joltageReqs
+        );
+      let buttonsToUse = getNonHarmfulButtonIdxs(
+        indexesOfJoltsThatNeedToIncrease,
+        buttonInfoMap
       );
 
-      const optionsToUse = pruneUselessHarmfulOptionsExperimental(
-        stateToExploreNumeric,
-        machineConfig.joltageReqs,
-        optionsAfterRemovingBanned
+      //remove any banned buttons
+      if (
+        stateToExplore.bannedButtons != undefined &&
+        stateToExplore.bannedButtons.length > 0
+      ) {
+        buttonsToUse = filterBannedButtons(
+          buttonsToUse,
+          stateToExplore.bannedButtons
+        );
+      }
+
+      //if in impossible state, give up on branch
+      const impossible = isStateImpossible(
+        indexesOfJoltsThatNeedToIncrease,
+        buttonsToUse,
+        buttonInfoMap
       );
 
-      const optionSubsetMap = {}
+      if (impossible) {
+        // console.log("pruned impossible option!");
+        continue;
+      }
 
-      const reachableStatesNumeric = optionsToUse.map(
-        (affectedJolts) =>
-          ({
-            state: numArrayToString(
-              stateToExploreNumeric.map((number, index) =>
-                affectedJolts.includes(index) ? number + 1 : number
-              )
+      buttonsToUse = selectMostUsefulOptions(
+        indexesOfJoltsThatNeedToIncrease,
+        buttonsToUse,
+        buttonInfoMap
+      );
+
+      const reachableStatesNumeric = buttonsToUse.map(
+        (
+          buttonIdx,
+          buttonIdxIdx //yes i know buttonidxidx is confusing
+        ) => {
+          let idxFirstSameSizeButton = buttonIdxIdx;
+          while (
+            idxFirstSameSizeButton > 0 &&
+            buttonInfoMap[buttonsToUse[idxFirstSameSizeButton - 1]].length ==
+              buttonInfoMap[buttonsToUse[idxFirstSameSizeButton]].length
+          ) {
+            idxFirstSameSizeButton--;
+          }
+
+          let bannedButtons: undefined | number[];
+          const prevBannedButtons = stateToExplore.bannedButtons;
+          const biggerButtonsNotChosen = buttonsToUse.slice(
+            0,
+            idxFirstSameSizeButton
+          );
+
+          // if stateToExplore had banned buttons (and they weren't an empty list)
+          if (prevBannedButtons != undefined && prevBannedButtons.length > 0) {
+            if (biggerButtonsNotChosen.length > 0) {
+              bannedButtons = mergeSorted(
+                prevBannedButtons,
+                biggerButtonsNotChosen
+              );
+            } else {
+              bannedButtons = prevBannedButtons;
+            }
+          } else if (biggerButtonsNotChosen.length > 0) {
+            bannedButtons = biggerButtonsNotChosen;
+          }
+
+          return {
+            joltageState: stateToExploreNumeric.map((number, index) =>
+              buttonInfoMap[buttonIdx].includes(index) ? number + 1 : number
             ),
             distance: stateToExplore.distance + 1,
-          } as state)
+            bannedButtons: bannedButtons,
+          };
+        }
       );
 
-      const statesToQueue = reachableStatesNumeric.filter(
-        (state) => !queuedOrVisitedStates[state.state]
-      );
+      const statesToQueue = reachableStatesNumeric.filter((state) => {
+        return (
+          !queuedOrVisitedJoltageStates.exists(state.joltageState)
+        );
+      });
 
       statesToQueue.forEach((state) => {
-        openStatesQueue.push(state);
-        queuedOrVisitedStates[state.state] = true;
+        dualPhaseQueue[writePhase].push(state);
+        queuedOrVisitedJoltageStates.add(state.joltageState);
       });
     }
   }
